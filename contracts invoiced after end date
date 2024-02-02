@@ -29,9 +29,7 @@ ORDER BY so_line_id, bdim.invoicedate, bdim.invoicenumber, bdim.invoicelineid
 
 
 -- to run dec'23 revenue recognized details
-
 WITH wf_cte AS (
-
 SELECT 
     cdim.revenuecontractid rc_id,
     cdim.ATR42 bruteforce_id,
@@ -57,7 +55,6 @@ WHERE cdim.productfamily = 'Software'
 AND to_char(bdim.invoicedate, 'YYYY-MM') > to_char(cdim.revenueenddate, 'YYYY-MM')
 AND bdim.billtype = 'INV'
 ORDER BY so_line_id, bdim.invoicedate, bdim.invoicenumber, bdim.invoicelineid
-
 )
 
 SELECT 
