@@ -1,0 +1,81 @@
+-- to run revenue details of contracts that were invoiced past the contract end date
+SELECT 
+    cdim.revenuecontractid rc_id,
+    cdim.ATR42 bruteforce_id,
+    cdim.salesorderlineid so_line_id,
+    bdim.productline product_desc,
+    left(cdim.revenuestartdate,10) rev_start_date,
+    left(cdim.revenueenddate,10) rev_end_date,
+    left(bdim.invoicedate,10) invoice_date,
+    revpro.start_date inv_applied_start_date,
+    revpro.end_date inv_applied_end_date,
+    bdim.invoicenumber,
+    bdim.invoicelineid,
+    round(bfact.billingextendedsellprice,2) invoice_amount,
+   CASE WHEN revpro.end_date > cdim.revenueenddate THEN 'Investigate' ELSE 'Backbilled' END action_items
+FROM zuora_prod.zuora_7l3xok7.revenuecontractlinesdimensions cdim
+    JOIN zuora_prod.zuora_7l3xok7.revenuecontractbillsdimensions bdim
+        ON cdim.salesorderlineid = bdim.referencelineid
+    JOIN zuora_prod.zuora_7l3xok7.revenuecontractbillsfacts bfact
+        ON bfact.revenuecontractbillid = bdim.revenuecontractbillid
+    JOIN accounting_revpro.revpro_src_trans_stg_h revpro
+        ON bdim.invoicelineid = revpro.invoice_line_id
+WHERE cdim.productfamily = 'Software'
+AND to_char(bdim.invoicedate, 'YYYY-MM') > to_char(cdim.revenueenddate, 'YYYY-MM')
+AND bdim.billtype = 'INV'
+ORDER BY so_line_id, bdim.invoicedate, bdim.invoicenumber, bdim.invoicelineid
+;
+
+
+
+-- to run a dec'23 revenue report for all populations found in the above table
+RevPro WF	"with wf_cte as (
+
+SELECT 
+    cdim.revenuecontractid rc_id,
+    cdim.ATR42 bruteforce_id,
+    cdim.salesorderlineid so_line_id,
+    bdim.productline product_desc,
+    left(cdim.revenuestartdate,10) rev_start_date,
+    left(cdim.revenueenddate,10) rev_end_date,
+    left(bdim.invoicedate,10) invoice_date,
+    revpro.start_date inv_applied_start_date,
+    revpro.end_date inv_applied_end_date,
+    bdim.invoicenumber,
+    bdim.invoicelineid,
+    round(bfact.billingextendedsellprice,2) invoice_amount,
+   CASE WHEN revpro.end_date > cdim.revenueenddate THEN 'Investigate' ELSE 'Backbilled' END action_items
+FROM zuora_prod.zuora_7l3xok7.revenuecontractlinesdimensions cdim
+    JOIN zuora_prod.zuora_7l3xok7.revenuecontractbillsdimensions bdim
+        ON cdim.salesorderlineid = bdim.referencelineid
+    JOIN zuora_prod.zuora_7l3xok7.revenuecontractbillsfacts bfact
+        ON bfact.revenuecontractbillid = bdim.revenuecontractbillid
+    JOIN accounting_revpro.revpro_src_trans_stg_h revpro
+        ON bdim.invoicelineid = revpro.invoice_line_id
+WHERE cdim.productfamily = 'Software'
+AND to_char(bdim.invoicedate, 'YYYY-MM') > to_char(cdim.revenueenddate, 'YYYY-MM')
+AND bdim.billtype = 'INV'
+ORDER BY so_line_id, bdim.invoicedate, bdim.invoicenumber, bdim.invoicelineid
+
+)
+
+SELECT 
+    cal.ACCOUNTINGPERIODNAME,
+    dim.salesorderlineid,
+    Round(SUM(JES.functionalcreditamount - JES.functionaldebitamount), 2) AS NET_REVENUE
+FROM   zuora_prod.zuora_7l3xok7.revenuecontractlinesdimensions DIM
+       left join zuora_prod.zuora_7l3xok7.revenuecontractaccountingentries JES
+              ON dim.revenuecontractid = jes.revenuecontractid
+             AND DIM.revenuecontractlineid = JES.rootrevenuecontractlineid
+       left join zuora_prod.zuora_7l3xok7.revenuecontractaccountingtype ACC
+              ON ACC.revenueaccounttypeid = JES.accountingtypeid
+       left join zuora_prod.zuora_7l3xok7.revenuecalendar CAL
+              ON CAL.accountingperiodid = JES.postingperiodid
+       left join zuora_prod.zuora_7l3xok7.revenuecontractlinesfacts SOFACT
+              ON dim.revenuecontractid = sofact.revenuecontractid
+             AND DIM.revenuecontractlineid = SOFACT.revenuecontractlineid
+WHERE  ACC.revenueaccounttypename IN ( 'Adjustment Revenue', 'Revenue' )
+  and cal.ACCOUNTINGPERIODNAME ='FY2023-12'
+  and dim.salesorderlineid IN (select so_line_id from gr_cte)
+group by cal.ACCOUNTINGPERIODNAME, dim.salesorderlineid"
+	
